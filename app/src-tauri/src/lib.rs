@@ -36,12 +36,7 @@ pub fn run() {
     })
     .on_menu_event(|_app, _event| {
       #[cfg(target_os = "macos")]
-      if _event.id() == REFRESH_MENU_ID {
-        use tauri::Manager;
-        if let Some(window) = _app.get_webview_window("main") {
-          let _ = window.eval("dispatchEvent(new Event('crosspoint-refresh'))");
-        }
-      }
+      mac_menu_event(_app, _event.id().as_ref());
     })
     .invoke_handler(tauri::generate_handler![
       imports::list_imports,
@@ -80,24 +75,81 @@ pub fn run() {
     });
 }
 
-#[cfg(target_os = "macos")]
-const REFRESH_MENU_ID: &str = "refresh";
-
-// The standard Mac menu bar plus View > Refresh (Cmd+R), the desktop stand-in for
-// pull-to-refresh: it fires the same `crosspoint-refresh` page event.
+// Mac menu bar: the standard App, Edit, View and Window menus, plus Settings (Cmd+,),
+// Refresh (Cmd+R, the desktop pull-to-refresh), a Go menu for the tabs and Back, and
+// Help linking to the project. Items act on the page through its hash routes.
 #[cfg(target_os = "macos")]
 fn mac_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-  use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-  let menu = Menu::default(app)?;
-  let refresh = MenuItem::with_id(app, REFRESH_MENU_ID, "Refresh", true, Some("CmdOrCtrl+R"))?;
-  let view = menu.items()?.into_iter().find_map(|item| {
-    let submenu = item.as_submenu()?.clone();
-    (submenu.text().ok()? == "View").then_some(submenu)
-  });
-  if let Some(view) = view {
-    view.prepend_items(&[&refresh, &PredefinedMenuItem::separator(app)?])?;
+  use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem as P, Submenu};
+  let name = app.package_info().name.clone();
+  let item = |id: &str, text: &str, key: &str| MenuItem::with_id(app, id, text, true, Some(key));
+  let app_menu = Submenu::with_items(app, &name, true, &[
+    &P::about(app, None, Some(AboutMetadata::default()))?,
+    &P::separator(app)?,
+    &item("settings", "Settings…", "CmdOrCtrl+,")?,
+    &P::separator(app)?,
+    &P::services(app, None)?,
+    &P::separator(app)?,
+    &P::hide(app, None)?,
+    &P::hide_others(app, None)?,
+    &P::show_all(app, None)?,
+    &P::separator(app)?,
+    &P::quit(app, None)?,
+  ])?;
+  let edit = Submenu::with_items(app, "Edit", true, &[
+    &P::undo(app, None)?,
+    &P::redo(app, None)?,
+    &P::separator(app)?,
+    &P::cut(app, None)?,
+    &P::copy(app, None)?,
+    &P::paste(app, None)?,
+    &P::select_all(app, None)?,
+  ])?;
+  let view = Submenu::with_items(app, "View", true, &[
+    &item("refresh", "Refresh", "CmdOrCtrl+R")?,
+    &P::separator(app)?,
+    &P::fullscreen(app, None)?,
+  ])?;
+  let go = Submenu::with_items(app, "Go", true, &[
+    &item("back", "Back", "CmdOrCtrl+[")?,
+    &P::separator(app)?,
+    &item("go:/", "Library", "CmdOrCtrl+1")?,
+    &item("go:/browse", "Browse", "CmdOrCtrl+2")?,
+    &item("go:/clippings", "Clippings", "CmdOrCtrl+3")?,
+    &item("go:/stats", "Stats", "CmdOrCtrl+4")?,
+    &item("go:/send", "Send", "CmdOrCtrl+5")?,
+  ])?;
+  let window = Submenu::with_items(app, "Window", true, &[
+    &P::minimize(app, None)?,
+    &P::maximize(app, None)?,
+    &P::separator(app)?,
+    &P::close_window(app, None)?,
+  ])?;
+  let help = Submenu::with_items(app, "Help", true, &[&MenuItem::with_id(app, "help", "CrossPoint Sync on GitHub", true, None::<&str>)?])?;
+  Menu::with_items(app, &[&app_menu, &edit, &view, &go, &window, &help])
+}
+
+#[cfg(target_os = "macos")]
+fn mac_menu_event(app: &tauri::AppHandle, id: &str) {
+  use tauri::Manager;
+  if id == "help" {
+    use tauri_plugin_opener::OpenerExt;
+    let _ = app.opener().open_url("https://github.com/crosspoint-reader/crosspoint-sync", None::<&str>);
+    return;
   }
-  Ok(menu)
+  let script = match id {
+    "refresh" => "dispatchEvent(new Event('crosspoint-refresh'))".to_string(),
+    "back" => "history.back()".to_string(),
+    "settings" => "location.hash = '#/settings'".to_string(),
+    _ => match id.strip_prefix("go:") {
+      // Like the iPhone tab bar: switching tabs doesn't add to Back.
+      Some(path) => format!("location.replace('#{path}')"),
+      None => return,
+    },
+  };
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.eval(&script);
+  }
 }
 
 // Read the real OS version; WebKit's user agent can report a compatibility version.
