@@ -39,5 +39,10 @@ objc2-foundation = { version = "0.3", features = ["NSData", "NSFileManager", "NS
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "UIControl", "UIImage", "UIImagePickerController", "UIRefreshControl", "UIResponder", "UIView"] }
 
+# Widget data in the App Group container (src/widget.rs).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSBundle", "NSFileManager", "NSString", "NSURL"] }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

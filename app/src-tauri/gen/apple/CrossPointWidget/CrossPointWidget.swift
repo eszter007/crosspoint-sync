@@ -1,13 +1,27 @@
 import SwiftUI
 import WidgetKit
 import Darwin
-
+#if os(macOS)
+import AppKit
+typealias UIImage = NSImage
+// macOS app groups carry the signing team's prefix; scripts/macos-widget.sh writes it here.
+private let appGroup = Bundle.main.object(forInfoDictionaryKey: "CrossPointAppGroup") as? String ?? ""
+#else
+import UIKit
 private let appGroup = "group.com.crosspointreader.sync"
+#endif
+
 private func adaptive(_ light: UInt32, _ dark: UInt32) -> Color {
-  func color(_ v: UInt32) -> UIColor {
-    UIColor(red: CGFloat(v >> 16 & 255) / 255, green: CGFloat(v >> 8 & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
+  func rgb(_ v: UInt32) -> (CGFloat, CGFloat, CGFloat) {
+    (CGFloat(v >> 16 & 255) / 255, CGFloat(v >> 8 & 255) / 255, CGFloat(v & 255) / 255)
   }
+  #if os(macOS)
+  func color(_ v: UInt32) -> NSColor { let (r, g, b) = rgb(v); return NSColor(srgbRed: r, green: g, blue: b, alpha: 1) }
+  return Color(NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? color(dark) : color(light) })
+  #else
+  func color(_ v: UInt32) -> UIColor { let (r, g, b) = rgb(v); return UIColor(red: r, green: g, blue: b, alpha: 1) }
   return Color(UIColor { $0.userInterfaceStyle == .dark ? color(dark) : color(light) })
+  #endif
 }
 private let paper = adaptive(0xFAFAF9, 0x121110)
 private let ink = adaptive(0x1C1917, 0xF3F0ED)
@@ -172,13 +186,22 @@ struct Provider: TimelineProvider {
   }
   private func coverPNG(_ image: UIImage) -> Data {
     let size = CGSize(width: 168, height: 252)
+    let scale = max(size.width / image.size.width, size.height / image.size.height)
+    let w = image.size.width * scale, h = image.size.height * scale
+    #if os(macOS)
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return Data() }
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    image.draw(in: CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h))
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:]) ?? Data()
+    #else
     let format = UIGraphicsImageRendererFormat()
     format.scale = 1
     return UIGraphicsImageRenderer(size: size, format: format).pngData { _ in
-      let scale = max(size.width / image.size.width, size.height / image.size.height)
-      let w = image.size.width * scale, h = image.size.height * scale
       image.draw(in: CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h))
     }
+    #endif
   }
 }
 
@@ -191,7 +214,7 @@ private struct CoverView: View {
   var width: CGFloat = 64
   var body: some View {
     Group {
-      if let image { Image(uiImage: image).resizable().fullColorInTint().aspectRatio(contentMode: .fill) }
+      if let image { Image(platformImage: image).resizable().fullColorInTint().aspectRatio(contentMode: .fill) }
       else { ZStack { brand.opacity(0.12); Image(systemName: "book.closed").font(.title).foregroundStyle(brand) } }
     }.frame(width: width, height: width * 1.5).clipShape(RoundedRectangle(cornerRadius: 7)).shadow(color: .black.opacity(0.12), radius: 4, y: 2)
   }
@@ -445,13 +468,20 @@ struct ReadingWidgetView: View {
 }
 
 extension Image {
+  init(platformImage: UIImage) {
+    #if os(macOS)
+    self.init(nsImage: platformImage)
+    #else
+    self.init(uiImage: platformImage)
+    #endif
+  }
   @ViewBuilder func fullColorInTint() -> some View {
-    if #available(iOSApplicationExtension 18.0, *) { widgetAccentedRenderingMode(.fullColor) } else { self }
+    if #available(iOSApplicationExtension 18.0, macOSApplicationExtension 15.0, *) { widgetAccentedRenderingMode(.fullColor) } else { self }
   }
 }
 extension View {
   @ViewBuilder func widgetBackground(_ color: Color) -> some View {
-    if #available(iOSApplicationExtension 17.0, *) { containerBackground(color, for: .widget) } else { padding().background(color) }
+    if #available(iOSApplicationExtension 17.0, macOSApplicationExtension 14.0, *) { containerBackground(color, for: .widget) } else { padding().background(color) }
   }
 }
 struct CrossPointWidget: Widget {

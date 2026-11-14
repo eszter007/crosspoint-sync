@@ -34,14 +34,16 @@ npm run tauri dev                    # desktop window
 npm run tauri ios dev                # iOS simulator (needs Xcode)
 npm run tauri android init && npm run tauri android dev
 npm run tauri build                  # release desktop bundle
+sh scripts/macos-widget.sh           # macOS: add the widgets and sign (after a build)
 ```
 
 ## Reading widgets and optional goals
 
 The widget gallery offers **Continue Reading**, **Reading Streak**, and **Yearly Goal**.
-Apple widgets support small, medium, and large layouts, plus extra-large on iPad.
-The iPhone widgets can also appear on your Mac through Apple's Continuity widget support;
-they use the iPhone's saved account, rather than the native Mac app's account.
+Apple widgets support small, medium, and large layouts, plus extra-large on iPad and Mac.
+The Mac app has the same widgets (macOS 14 or later) for the desktop and Notification Centre,
+using the Mac app's account. They are only in builds signed by `scripts/macos-widget.sh`.
+iPhone widgets shown on a Mac through Continuity still use the iPhone's account.
 Android offers the same three choices, with details adapting to launcher resizing.
 Streaks use recorded reading days, including readers that do not report reading time.
 Gallery book samples use *Eternity’s Tomb* by Dan Moren, with the cover bundled from

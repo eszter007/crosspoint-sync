@@ -1,15 +1,19 @@
-//! iOS home screen widget data: the app hands over the current book and
+//! iOS and macOS widget data: the app hands over the current book and
 //! stats, and this writes them into the App Group container the WidgetKit
 //! extension (gen/apple/CrossPointWidget) reads. Android uses a JS bridge in
 //! MainActivity instead; elsewhere there's no widget, so this is a no-op.
 
 #[tauri::command]
 pub fn update_widget(json: String, cover: String) -> Result<(), String> {
-  #[cfg(target_os = "ios")]
+  #[cfg(any(target_os = "ios", target_os = "macos"))]
   {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use std::os::fd::AsRawFd;
+    #[cfg(target_os = "ios")]
     let dir = group_dir().ok_or("App Group container unavailable")?;
+    // Mac builds not signed by scripts/macos-widget.sh have no widget to feed.
+    #[cfg(target_os = "macos")]
+    let Some(dir) = group_dir() else { return Ok(()) };
     // Shared with the extension. Its refresh checks the old snapshot under this
     // lock before publishing, so a request finishing after logout cannot revive it.
     extern "C" { fn flock(fd: i32, operation: i32) -> i32; }
@@ -41,23 +45,33 @@ pub fn update_widget(json: String, cover: String) -> Result<(), String> {
     // Redraw now rather than at the widget's next scheduled refresh.
     unsafe { crosspoint_reload_widgets() };
   }
-  #[cfg(not(target_os = "ios"))]
+  #[cfg(not(any(target_os = "ios", target_os = "macos")))]
   let _ = (json, cover);
   Ok(())
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 extern "C" {
   // gen/apple/Sources/crosspoint-sync-app/WidgetReload.swift
   fn crosspoint_reload_widgets();
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "macos"))]
 #[allow(unused_unsafe)]
 pub(crate) fn group_dir() -> Option<std::path::PathBuf> {
   use objc2_foundation::{NSFileManager, NSString};
+  #[cfg(target_os = "ios")]
+  let group = NSString::from_str("group.com.crosspointreader.sync");
+  // macOS groups carry the signing team's prefix, so scripts/macos-widget.sh records
+  // the group in Info.plist. Builds without the widget have none and write nothing.
+  #[cfg(target_os = "macos")]
+  let group = {
+    use objc2_foundation::NSBundle;
+    let value = unsafe { NSBundle::mainBundle().objectForInfoDictionaryKey(&NSString::from_str("CrossPointAppGroup")) }?;
+    value.downcast::<NSString>().ok()?
+  };
   let manager = unsafe { NSFileManager::defaultManager() };
-  let url = unsafe { manager.containerURLForSecurityApplicationGroupIdentifier(&NSString::from_str("group.com.crosspointreader.sync")) }?;
+  let url = unsafe { manager.containerURLForSecurityApplicationGroupIdentifier(&group) }?;
   let path = unsafe { url.path() }?;
   Some(path.to_string().into())
 }
@@ -81,7 +95,7 @@ pub fn update_shortcuts(app: tauri::AppHandle, json: Option<String>) -> Result<(
 }
 
 // Kept independent of the iOS filesystem so identity boundaries are testable.
-#[cfg(any(target_os = "ios", test))]
+#[cfg(any(target_os = "ios", target_os = "macos", test))]
 fn matching_cover(incoming: &serde_json::Value, previous: &serde_json::Value) -> bool {
   // Credentials can rotate without changing the account that owns the image.
   ["server", "username"].iter().all(|key|

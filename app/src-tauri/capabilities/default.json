@@ -7,6 +7,8 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
     "deep-link:default",
     "haptics:allow-impact-feedback",
     "haptics:allow-selection-feedback",
