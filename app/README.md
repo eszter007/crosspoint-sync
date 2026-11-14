@@ -35,7 +35,13 @@ npm run tauri ios dev                # iOS simulator (needs Xcode)
 npm run tauri android init && npm run tauri android dev
 npm run tauri build                  # release desktop bundle
 sh scripts/macos-widget.sh           # macOS: add the widgets and sign (after a build)
+npm run mac:release                  # macOS: universal, notarized .dmg for a release
 ```
+
+`mac:release` needs a Developer ID Application certificate in `MAC_SIGN_IDENTITY`, rustup
+with the `aarch64-apple-darwin` and `x86_64-apple-darwin` targets, and, to notarize, a
+`NOTARY_PROFILE` saved once with `xcrun notarytool store-credentials`. The app doesn't
+update itself yet: people download each new .dmg from the GitHub release.
 
 ## Reading widgets and optional goals
 

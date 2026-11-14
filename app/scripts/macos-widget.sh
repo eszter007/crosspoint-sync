@@ -68,7 +68,7 @@ cat > "$WORK/app.entitlements" <<EOF
 </dict></plist>
 EOF
 
-codesign --force --options runtime --sign "$IDENTITY" --entitlements "$WORK/widget.entitlements" "$APPEX"
-codesign --force --options runtime --sign "$IDENTITY" --entitlements "$WORK/app.entitlements" "$APP"
+codesign --force --options runtime --timestamp --sign "$IDENTITY" --entitlements "$WORK/widget.entitlements" "$APPEX"
+codesign --force --options runtime --timestamp --sign "$IDENTITY" --entitlements "$WORK/app.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
 echo "Widget embedded and signed ($IDENTITY, group $GROUP)."
