@@ -30,7 +30,18 @@ pub fn run() {
       native_scroll(_app)?;
       #[cfg(target_os = "ios")]
       refresh::install(_app)?;
+      #[cfg(target_os = "macos")]
+      _app.set_menu(mac_menu(_app.handle())?)?;
       Ok(())
+    })
+    .on_menu_event(|_app, _event| {
+      #[cfg(target_os = "macos")]
+      if _event.id() == REFRESH_MENU_ID {
+        use tauri::Manager;
+        if let Some(window) = _app.get_webview_window("main") {
+          let _ = window.eval("dispatchEvent(new Event('crosspoint-refresh'))");
+        }
+      }
     })
     .invoke_handler(tauri::generate_handler![
       imports::list_imports,
@@ -67,6 +78,26 @@ pub fn run() {
         for url in urls { imports::open(_app, &url); }
       }
     });
+}
+
+#[cfg(target_os = "macos")]
+const REFRESH_MENU_ID: &str = "refresh";
+
+// The standard Mac menu bar plus View > Refresh (Cmd+R), the desktop stand-in for
+// pull-to-refresh: it fires the same `crosspoint-refresh` page event.
+#[cfg(target_os = "macos")]
+fn mac_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+  use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+  let menu = Menu::default(app)?;
+  let refresh = MenuItem::with_id(app, REFRESH_MENU_ID, "Refresh", true, Some("CmdOrCtrl+R"))?;
+  let view = menu.items()?.into_iter().find_map(|item| {
+    let submenu = item.as_submenu()?.clone();
+    (submenu.text().ok()? == "View").then_some(submenu)
+  });
+  if let Some(view) = view {
+    view.prepend_items(&[&refresh, &PredefinedMenuItem::separator(app)?])?;
+  }
+  Ok(menu)
 }
 
 // Read the real OS version; WebKit's user agent can report a compatibility version.

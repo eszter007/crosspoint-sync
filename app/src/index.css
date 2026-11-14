@@ -241,3 +241,13 @@ body::before {
   top: max(env(safe-area-inset-top), var(--native-inset-top, 0px));
   right: calc(max(env(safe-area-inset-right), var(--native-inset-right, 0px)) + 0.75rem);
 }
+
+/* macOS app: hidden title bar; contents start below the traffic lights. */
+.mac-window { --mac-titlebar: 2.25rem; }
+.mac-window .app-sidebar { padding-top: calc(1.5rem + var(--mac-titlebar)); }
+.mac-window .app-main, .mac-window .auth-layout { padding-top: var(--mac-titlebar); }
+.mac-window .settings-shortcut { top: calc(var(--mac-titlebar) + 0.25rem); }
+.mac-drag-strip { position: fixed; inset: 0 0 auto 0; height: var(--mac-titlebar); z-index: 25; } /* over pages, under dialogs */
+/* No rubber-band on trackpad swipes: it drags the fixed sidebar along with the page. */
+.mac-window, .mac-window body { overscroll-behavior: none; overflow-x: clip; }
+.mac-window .app-sidebar { overscroll-behavior: contain; overflow-x: clip; }

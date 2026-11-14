@@ -22,6 +22,15 @@ export async function initializeNavigation() {
     nativeTabBar = await invoke('supports_native_chrome').catch(() => false)
   }
   document.documentElement.classList.toggle('native-chrome', nativeTabBar)
+  // Mac window: no title bar, so the page draws under the traffic lights (index.css)
+  // and a strip along the top drags the window. iPads also say Macintosh, but have touch.
+  if (isApp && /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints <= 1) {
+    document.documentElement.classList.add('mac-window')
+    const strip = document.createElement('div')
+    strip.className = 'mac-drag-strip'
+    strip.setAttribute('data-tauri-drag-region', '')
+    document.body.append(strip)
+  }
 }
 
 let sheets = 0

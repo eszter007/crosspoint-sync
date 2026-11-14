@@ -80,7 +80,7 @@ function Login({ onLogin, onSkip }) {
   }
 
   return (
-    <div className="flex min-h-screen-safe flex-col bg-stone-50 md:flex-row">
+    <div className="auth-layout flex min-h-screen-safe flex-col bg-stone-50 md:flex-row">
       <div className="relative m-3 h-[36dvh] min-h-60 shrink-0 overflow-hidden rounded-[28px] bg-brand-900 md:m-4 md:h-auto md:flex-1">
         <img src={`${import.meta.env.BASE_URL}hero.jpg`} alt="" className="absolute inset-0 size-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-brand-950/95 via-brand-950/40 to-transparent" />
@@ -344,7 +344,7 @@ function SettingsLink() {
     <a
       href="#/settings"
       aria-label="Settings"
-      className="native-hide absolute top-4 right-3 z-20 grid size-11 place-items-center rounded-full text-stone-600 active:bg-stone-200/70 md:hidden"
+      className="settings-shortcut native-hide absolute top-4 right-3 z-20 grid size-11 place-items-center rounded-full text-stone-600 active:bg-stone-200/70 md:hidden"
     >
       <SettingsIcon className="size-6" strokeWidth={1.75} />
     </a>
@@ -355,7 +355,7 @@ function SettingsLink() {
 // Runs to the bottom and left screen edges; padding keeps its contents out of the insets.
 function Sidebar({ route, session, nav = NAV }) {
   return (
-    <aside className="fixed top-[env(safe-area-inset-top)] bottom-0 left-0 hidden w-[calc(15rem+env(safe-area-inset-left))] flex-col border-r border-stone-200 bg-surface/60 pt-6 pr-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[calc(1rem+env(safe-area-inset-left))] md:flex lg:w-[calc(16rem+env(safe-area-inset-left))]">
+    <aside className="app-sidebar fixed top-[env(safe-area-inset-top)] bottom-0 left-0 hidden w-[calc(15rem+env(safe-area-inset-left))] flex-col border-r border-stone-200 bg-surface/60 pt-6 pr-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[calc(1rem+env(safe-area-inset-left))] md:flex lg:w-[calc(16rem+env(safe-area-inset-left))]">
       {/* 44px band at the top, matching each page's first row (back button / title). */}
       <div className="flex h-11 items-center gap-2.5 px-2">
         <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" className="size-8 rounded-lg" />
@@ -463,17 +463,31 @@ function Home({ session, onSession, onLogout, theme }) {
   useEffect(() => {
     if (error?.status === 401 || activityError?.status === 401) onLogout()
   }, [error, activityError, onLogout])
+  // Desktop windows stay visible behind other apps, so coming back to the window also
+  // counts, at most once a minute. Phones fire both events on return; one reload is enough.
+  const lastReload = useRef(Date.now())
   useEffect(() => {
-    const on = () => {
-      if (document.visibilityState === 'visible') {
-        reloadBooks()
-        reloadSummary()
-        reloadActivity()
-        reloadGoals()
-      }
+    const reload = () => {
+      reloadBooks()
+      reloadSummary()
+      reloadActivity()
+      reloadGoals()
     }
-    document.addEventListener('visibilitychange', on)
-    return () => document.removeEventListener('visibilitychange', on)
+    const reloadAfter = (ms) => {
+      if (Date.now() - lastReload.current < ms) return
+      lastReload.current = Date.now()
+      reload()
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reloadAfter(2_000)
+    }
+    const onFocus = () => reloadAfter(60_000)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onFocus)
+    }
   })
 
   // Native pull-to-refresh (iOS refresh control, Android SwipeRefreshLayout): reload
